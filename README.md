@@ -8,7 +8,7 @@ A single API endpoint that automatically routes each prompt to the most cost-eff
 
 | Complexity | Model | Location |
 |------------|-------|----------|
-| Simple | Phi-3-mini | Local (Ollama) |
+| Simple | Granite 4.0 Nano (350M) | Local (Ollama) |
 | Medium | Gemini 2.0 Flash | GCP API |
 | Complex | Gemini 1.5 Pro | GCP API |
 
@@ -36,12 +36,12 @@ A single API endpoint that automatically routes each prompt to the most cost-eff
 
 3. **Pull the local model**
    ```bash
-   docker exec -it router-ollama ollama pull phi3:mini
+   ollama pull granite4:350m
    ```
 
-4. **Install Python dependencies**
+4. **Install Python dependencies (using uv)**
    ```bash
-   pip install -e ".[dev]"
+   uv pip install -e ".[dev]"
    ```
 
 5. **Run database migrations**
@@ -91,7 +91,7 @@ curl -X POST http://localhost:8000/v1/complete \
 ```json
 {
   "response": "...",
-  "model_used": "phi3:mini",
+  "model_used": "granite4:350m",
   "difficulty_tag": "simple",
   "estimated_cost": 0.0,
   "estimated_savings": 0.015
