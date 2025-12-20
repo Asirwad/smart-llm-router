@@ -53,8 +53,8 @@ class Settings(BaseSettings):
     # ===================
     # Routing Thresholds
     # ===================
-    simple_token_threshold: int = 100
-    complex_token_threshold: int = 500
+    simple_token_threshold: int = 50   # Below this = simple (very short prompts)
+    complex_token_threshold: int = 500  # Above this = complex (very long prompts)
 
     # ===================
     # Logging
