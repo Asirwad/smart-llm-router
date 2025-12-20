@@ -10,12 +10,15 @@ services:
       POSTGRES_USER: router_user
       POSTGRES_PASSWORD: router_password
       POSTGRES_DB: router_db
+      # For development: bypass password auth (remove in production!)
+      POSTGRES_HOST_AUTH_METHOD: trust
     ports:
-      - "5432:5432"
+      # Using 5433 to avoid conflict with local PostgreSQL on 5432
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U router_user -d router_db"]
+      test: [ "CMD-SHELL", "pg_isready -U router_user -d router_db" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -29,7 +32,7 @@ services:
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -49,9 +52,9 @@ services:
           devices:
             - driver: nvidia
               count: 1
-              capabilities: [gpu]
+              capabilities: [ gpu ]
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      test: [ "CMD", "curl", "-f", "http://localhost:11434/api/tags" ]
       interval: 10s
       timeout: 10s
       retries: 5
@@ -78,7 +81,7 @@ services:
       ollama:
         condition: service_healthy
     volumes:
-      - ./src:/app/src:ro  # Mount source for development
+      - ./src:/app/src:ro # Mount source for development
 
 volumes:
   postgres_data:

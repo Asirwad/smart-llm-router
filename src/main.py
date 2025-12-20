@@ -1,8 +1,10 @@
 """
 Smart Model Router - FastAPI Application Entry Point
 
-This is a minimal placeholder to verify the infrastructure works.
-Full implementation will be added in Phase 3.
+This module initializes the FastAPI application with:
+- Database connection management
+- Health checks
+- API routes (added in Phase 3)
 """
 
 from contextlib import asynccontextmanager
@@ -10,6 +12,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from src.config import get_settings
+from src.db import close_db, init_db
 
 
 @asynccontextmanager
@@ -21,17 +24,28 @@ async def lifespan(app: FastAPI):
     - Startup: Initialize DB connections, cache, etc.
     - Shutdown: Clean up resources
     """
-    # Startup
     settings = get_settings()
-    print(f"🚀 Starting Smart Model Router...")
+    
+    # === Startup ===
+    print("🚀 Starting Smart Model Router...")
     print(f"   Log Level: {settings.log_level}")
     print(f"   Ollama URL: {settings.ollama_base_url}")
     print(f"   Database: {settings.database_url.split('@')[-1]}")  # Hide credentials
     
+    # Initialize database connection
+    try:
+        await init_db()
+        print("   ✅ Database connected")
+    except Exception as e:
+        print(f"   ❌ Database connection failed: {e}")
+        raise
+    
     yield  # Application runs here
     
-    # Shutdown
+    # === Shutdown ===
     print("👋 Shutting down Smart Model Router...")
+    await close_db()
+    print("   ✅ Database connections closed")
 
 
 app = FastAPI(
@@ -56,3 +70,4 @@ async def root():
         "version": "0.1.0",
         "docs": "/docs",
     }
+
