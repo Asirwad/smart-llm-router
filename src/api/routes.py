@@ -1,0 +1,190 @@
+"""
+API Routes for Smart Model Router.
+
+Defines all HTTP endpoints organized by functionality:
+- /v1/complete: Main completion endpoint
+- /v1/keys: API key management
+- /health: Health check
+"""
+
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func, select
+
+from src.api.dependencies import DBSession, ValidatedAPIKey, generate_api_key
+from src.api.schemas import (
+    APIKeyCreate,
+    APIKeyListResponse,
+    APIKeyResponse,
+    CompletionRequest,
+    CompletionResponse,
+    ErrorResponse,
+    HealthResponse,
+)
+from src.config import get_settings
+from src.db import APIKey, get_session
+
+# Create router for v1 API
+router = APIRouter(prefix="/v1", tags=["v1"])
+
+
+# ===================
+# Completion Endpoint
+# ===================
+
+@router.post(
+    "/complete",
+    response_model=CompletionResponse,
+    responses={
+        401: {"model": ErrorResponse, "description": "Invalid or missing API key"},
+        422: {"model": ErrorResponse, "description": "Validation error"},
+        500: {"model": ErrorResponse, "description": "Internal server error"},
+    },
+    summary="Generate a completion",
+    description="Routes the prompt to the most cost-effective model based on complexity.",
+)
+async def create_completion(
+    request: CompletionRequest,
+    api_key: ValidatedAPIKey,
+    session: DBSession,
+) -> CompletionResponse:
+    """
+    Main completion endpoint.
+    
+    Flow:
+    1. Validate API key (via dependency)
+    2. Check cache for existing response
+    3. Classify prompt difficulty
+    4. Route to appropriate model
+    5. Log request and cost
+    6. Return response with cost data
+    """
+    import time
+    start_time = time.perf_counter()
+    
+    # TODO: Phase 4 - Implement router logic
+    # TODO: Phase 5 - Implement model providers
+    # TODO: Phase 7 - Check cache first
+    
+    # Placeholder response for now
+    # This will be replaced with actual implementation in later phases
+    latency_ms = int((time.perf_counter() - start_time) * 1000)
+    
+    return CompletionResponse(
+        response="[Placeholder] Router not yet implemented. Coming in Phase 4-5!",
+        model_used="placeholder",
+        difficulty_tag="simple",
+        estimated_cost=0.0,
+        estimated_savings=0.0,
+        latency_ms=latency_ms,
+        cache_hit=False,
+    )
+
+
+# ===================
+# API Key Management
+# ===================
+
+@router.post(
+    "/keys",
+    response_model=APIKeyResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a new API key",
+    description="Generate a new API key. The raw key is only shown once!",
+)
+async def create_api_key(
+    request: APIKeyCreate,
+    session: DBSession,
+) -> APIKeyResponse:
+    """
+    Create a new API key.
+    
+    WARNING: The raw key is only returned once. Store it securely!
+    """
+    # Generate key and hash
+    raw_key, key_hash = generate_api_key()
+    
+    # Create database record
+    api_key = APIKey(
+        key_hash=key_hash,
+        name=request.name,
+        is_active=True,
+    )
+    session.add(api_key)
+    await session.flush()  # Get the ID without committing
+    
+    return APIKeyResponse(
+        id=api_key.id,
+        name=api_key.name,
+        key=raw_key,  # Only time we return the raw key!
+        is_active=api_key.is_active,
+        created_at=api_key.created_at or datetime.now(timezone.utc),
+        last_used_at=api_key.last_used_at,
+    )
+
+
+@router.get(
+    "/keys",
+    response_model=APIKeyListResponse,
+    summary="List all API keys",
+    description="List all API keys (without the raw key values).",
+)
+async def list_api_keys(
+    session: DBSession,
+) -> APIKeyListResponse:
+    """List all API keys."""
+    result = await session.execute(
+        select(APIKey).order_by(APIKey.created_at.desc())
+    )
+    keys = result.scalars().all()
+    
+    return APIKeyListResponse(
+        keys=[
+            APIKeyResponse(
+                id=key.id,
+                name=key.name,
+                key=None,  # Never expose raw key in list
+                is_active=key.is_active,
+                created_at=key.created_at,
+                last_used_at=key.last_used_at,
+            )
+            for key in keys
+        ],
+        total=len(keys),
+    )
+
+
+@router.delete(
+    "/keys/{key_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Deactivate an API key",
+    description="Deactivate an API key (soft delete).",
+)
+async def deactivate_api_key(
+    key_id: str,
+    session: DBSession,
+) -> None:
+    """Deactivate an API key (soft delete)."""
+    from uuid import UUID
+    
+    try:
+        uuid_key = UUID(key_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid key ID format",
+        )
+    
+    result = await session.execute(
+        select(APIKey).where(APIKey.id == uuid_key)
+    )
+    api_key = result.scalar_one_or_none()
+    
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="API key not found",
+        )
+    
+    api_key.is_active = False
