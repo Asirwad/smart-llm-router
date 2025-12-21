@@ -177,8 +177,8 @@ flowchart TB
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/smart-model-router.git
-cd smart-model-router
+git clone https://github.com/Asirwad/smart-llm-router.git
+cd smart-llm-router
 
 # Configure environment
 cp .env.example .env
