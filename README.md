@@ -8,21 +8,6 @@
 
 ---
 
-## 📋 Table of Contents
-
-- [The Problem](#-the-problem)
-- [The Solution](#-the-solution)
-- [Architecture](#-architecture)
-- [Key Features](#-key-features)
-- [Performance](#-performance)
-- [Quick Start](#-quick-start)
-- [API Reference](#-api-reference)
-- [Technical Deep Dive](#-technical-deep-dive)
-- [Configuration](#-configuration)
-- [Development](#-development)
-
----
-
 ## 🎯 The Problem
 
 **LLM API costs are exploding.** Organizations using GPT or Gemini Pro for every request face:
@@ -407,3 +392,4 @@ pyrefly check
 - [ ] **OpenAI Compatibility**: Drop-in replacement for `/v1/chat/completions`
 - [ ] **Multi-Tenant**: Organization-level API key scoping
 - [ ] **Fine-Tuned Router**: Train classifier on production data
+
