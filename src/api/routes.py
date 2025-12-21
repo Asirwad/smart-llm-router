@@ -54,31 +54,61 @@ async def create_completion(
     
     Flow:
     1. Validate API key (via dependency)
-    2. Check cache for existing response
+    2. Check cache for existing response (TODO: Phase 7)
     3. Classify prompt difficulty
     4. Route to appropriate model
-    5. Log request and cost
+    5. Log request and cost (TODO: Phase 6)
     6. Return response with cost data
     """
     import time
+    from src.core import get_router
+    from src.providers import get_provider_manager, ProviderError
+    
     start_time = time.perf_counter()
     
-    # TODO: Phase 4 - Implement router logic
-    # TODO: Phase 5 - Implement model providers
     # TODO: Phase 7 - Check cache first
+    cache_hit = False
     
-    # Placeholder response for now
-    # This will be replaced with actual implementation in later phases
+    # Step 1: Classify the prompt
+    router_agent = get_router()
+    routing_decision = await router_agent.classify(
+        request.prompt,
+        force_tier=request.force_tier,
+    )
+    
+    # Step 2: Call the appropriate model
+    provider_manager = get_provider_manager()
+    
+    try:
+        response, actual_tier = await provider_manager.generate(
+            prompt=request.prompt,
+            tier=routing_decision.tier,
+            max_retries=2,
+            allow_fallback=True,
+        )
+    except ProviderError as e:
+        # Convert provider error to HTTP error
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"LLM provider error: {e}",
+        )
+    
+    # Calculate latency
     latency_ms = int((time.perf_counter() - start_time) * 1000)
     
+    # TODO: Phase 6 - Calculate actual costs and log to database
+    # For now, use placeholder costs
+    estimated_cost = 0.0
+    estimated_savings = 0.0
+    
     return CompletionResponse(
-        response="[Placeholder] Router not yet implemented. Coming in Phase 4-5!",
-        model_used="placeholder",
-        difficulty_tag="simple",
-        estimated_cost=0.0,
-        estimated_savings=0.0,
+        response=response.text,
+        model_used=response.model,
+        difficulty_tag=actual_tier.value,
+        estimated_cost=estimated_cost,
+        estimated_savings=estimated_savings,
         latency_ms=latency_ms,
-        cache_hit=False,
+        cache_hit=cache_hit,
     )
 
 
