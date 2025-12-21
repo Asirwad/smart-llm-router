@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     # ===================
     google_api_key: str = ""
     gemini_flash_model: str = "gemini-2.0-flash-exp"
-    gemini_pro_model: str = "gemini-1.5-pro"
+    gemini_pro_model: str = "gemini-2.5-pro"
 
     # ===================
     # API Security
