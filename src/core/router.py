@@ -333,11 +333,144 @@ class RuleBasedRouter(BaseRouter):
 
 # Default router instance
 _router: Optional[BaseRouter] = None
+_rule_router: Optional[RuleBasedRouter] = None
+
+
+class LLMRouter(BaseRouter):
+    """
+    LLM-based router using Granite for classification.
+    
+    Uses the local Granite model to analyze prompt complexity.
+    Falls back to rule-based routing if LLM fails.
+    """
+    
+    # Classification prompt template
+    CLASSIFICATION_PROMPT = """You are a prompt classifier. Analyze the following user prompt and classify its complexity.
+
+User Prompt:
+{prompt}
+
+Classify this prompt into ONE of these categories:
+- SIMPLE: Basic tasks like summarization, translation, simple Q&A, formatting
+- MEDIUM: Explanations, code generation, comparisons, moderate analysis
+- COMPLEX: Architecture design, debugging, multi-step reasoning, advanced analysis
+
+Respond with ONLY the category name (SIMPLE, MEDIUM, or COMPLEX) and a brief reason.
+Format: CATEGORY|reason
+
+Example: SIMPLE|This is a basic translation request"""
+
+    def __init__(self):
+        """Initialize with fallback router."""
+        self.settings = get_settings()
+        self._fallback_router = RuleBasedRouter()
+        self._client = None
+        
+        # Model mapping
+        self.model_map = {
+            DifficultyTier.SIMPLE: self.settings.ollama_model,
+            DifficultyTier.MEDIUM: self.settings.gemini_flash_model,
+            DifficultyTier.COMPLEX: self.settings.gemini_pro_model,
+        }
+    
+    async def _get_client(self):
+        """Get or create HTTP client."""
+        if self._client is None:
+            import httpx
+            self._client = httpx.AsyncClient(timeout=30)
+        return self._client
+    
+    def analyze_prompt(self, prompt: str) -> PromptAnalysis:
+        """Delegate to rule-based router for analysis."""
+        return self._fallback_router.analyze_prompt(prompt)
+    
+    async def _call_llm(self, prompt: str) -> str:
+        """Call Granite for classification."""
+        client = await self._get_client()
+        
+        classification_prompt = self.CLASSIFICATION_PROMPT.format(prompt=prompt[:1000])  # Limit prompt size
+        
+        response = await client.post(
+            f"{self.settings.ollama_base_url}/api/generate",
+            json={
+                "model": self.settings.ollama_model,
+                "prompt": classification_prompt,
+                "stream": False,
+            },
+        )
+        response.raise_for_status()
+        data = response.json()
+        return data.get("response", "")
+    
+    def _parse_classification(self, llm_response: str) -> tuple[DifficultyTier, str]:
+        """Parse LLM response into tier and reason."""
+        response = llm_response.strip().upper()
+        
+        # Try to parse CATEGORY|reason format
+        if "|" in response:
+            parts = response.split("|", 1)
+            category = parts[0].strip()
+            reason = parts[1].strip() if len(parts) > 1 else "LLM classification"
+        else:
+            # Just extract the category from the response
+            category = response
+            reason = "LLM classification"
+        
+        # Map to tier
+        if "SIMPLE" in category:
+            return DifficultyTier.SIMPLE, reason
+        elif "COMPLEX" in category:
+            return DifficultyTier.COMPLEX, reason
+        else:
+            return DifficultyTier.MEDIUM, reason
+    
+    async def classify(self, prompt: str, force_tier: Optional[str] = None) -> RoutingDecision:
+        """
+        Classify using LLM with fallback to rules.
+        """
+        # Handle forced tier
+        if force_tier:
+            tier = DifficultyTier(force_tier)
+            return RoutingDecision(
+                tier=tier,
+                model=self.model_map[tier],
+                reason=f"Forced to {force_tier} tier by request",
+                confidence=1.0,
+            )
+        
+        try:
+            # Call LLM for classification
+            llm_response = await self._call_llm(prompt)
+            tier, reason = self._parse_classification(llm_response)
+            
+            return RoutingDecision(
+                tier=tier,
+                model=self.model_map[tier],
+                reason=f"LLM: {reason}",
+                confidence=0.85,
+            )
+        except Exception as e:
+            # Fallback to rule-based on any error
+            print(f"⚠️ LLM classification failed, using rules: {e}")
+            return await self._fallback_router.classify(prompt, force_tier)
 
 
 def get_router() -> BaseRouter:
-    """Get the singleton router instance."""
-    global _router
-    if _router is None:
-        _router = RuleBasedRouter()
-    return _router
+    """
+    Get the singleton router instance.
+    
+    Uses LLMRouter if enabled in settings, otherwise RuleBasedRouter.
+    """
+    global _router, _rule_router
+    
+    settings = get_settings()
+    
+    if settings.use_llm_router:
+        if _router is None or not isinstance(_router, LLMRouter):
+            _router = LLMRouter()
+        return _router
+    else:
+        if _rule_router is None:
+            _rule_router = RuleBasedRouter()
+        return _rule_router
+

@@ -55,6 +55,7 @@ class Settings(BaseSettings):
     # ===================
     simple_token_threshold: int = 50   # Below this = simple (very short prompts)
     complex_token_threshold: int = 500  # Above this = complex (very long prompts)
+    use_llm_router: bool = True  # Use LLM-based classification (vs rule-based)
 
     # ===================
     # Logging
