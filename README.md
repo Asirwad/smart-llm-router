@@ -1,4 +1,4 @@
-# 🧠 Smart Model Router
+# Smart Model Router
 
 **An intelligent LLM routing system that reduces inference costs by up to 99% by automatically directing prompts to the optimal model based on complexity.**
 
