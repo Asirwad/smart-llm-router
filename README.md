@@ -25,7 +25,7 @@
 
 ## 🎯 The Problem
 
-**LLM API costs are exploding.** Organizations using GPT-4 or Gemini Pro for every request face:
+**LLM API costs are exploding.** Organizations using GPT or Gemini Pro for every request face:
 
 | Challenge | Impact |
 |-----------|--------|
@@ -41,57 +41,74 @@
 
 Smart Model Router is a **drop-in proxy** that sits between your application and LLM providers. It analyzes each prompt and routes it to the cheapest capable model:
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        Smart Model Router                          │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│   "Summarize this email"  →  Granite 4.0 Nano (Local)  →  $0.00001 │
-│   "Explain quantum computing"  →  Gemini Flash  →  $0.0003         │
-│   "Design a microservices architecture"  →  Gemini Pro  →  $0.01   │
-│                                                                     │
-│   💰 SAVINGS: 90-99% on simple tasks                                │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph Input
+        A["Summarize this email"] --> R
+        B["Explain quantum computing"] --> R
+        C["Design microservices arch"] --> R
+    end
+    
+    R[Smart Model Router] --> D["Granite Local<br/>💰 $0.00001"]
+    R --> E["Gemini Flash<br/>💰 $0.0003"]
+    R --> F["Gemini Pro<br/>💰 $0.01"]
+    
+    D --> S["✅ 90-99% Savings"]
+    E --> S
+    F --> S
 ```
 
 ---
 
-## � Architecture
+## 🏗️ Architecture
 
-```
-                                    ┌──────────────────────────────────────┐
-                                    │           Smart Model Router         │
-                                    │                                      │
-┌──────────┐     ┌─────────────┐    │  ┌─────────────────────────────────┐ │
-│  Client  │────▶│  FastAPI    │────┼─▶│  Semantic Cache (Redis Stack)  │ │
-│   App    │     │  Gateway    │    │  │  • Embedding-based similarity  │ │
-└──────────┘     └─────────────┘    │  │  • 72ms cache hits             │ │
-                       │            │  └───────────────┬─────────────────┘ │
-                       │            │                  │ Cache Miss        │
-                       ▼            │                  ▼                   │
-              ┌─────────────┐       │  ┌─────────────────────────────────┐ │
-              │  API Key    │       │  │     LLM-Based Router            │ │
-              │  Auth       │       │  │  • Granite classifies prompts   │ │
-              └─────────────┘       │  │  • SIMPLE / MEDIUM / COMPLEX    │ │
-                                    │  └───────────────┬─────────────────┘ │
-                                    │                  │                   │
-                                    │      ┌───────────┴───────────┐       │
-                                    │      ▼           ▼           ▼       │
-                                    │  ┌───────┐  ┌─────────┐  ┌───────┐   │
-                                    │  │Granite│  │ Gemini  │  │Gemini │   │
-                                    │  │ Local │  │  Flash  │  │  Pro  │   │
-                                    │  │$0.01/M│  │$0.075/M │  │$10/M  │   │
-                                    │  └───────┘  └─────────┘  └───────┘   │
-                                    │                  │                   │
-                                    │                  ▼                   │
-                                    │  ┌─────────────────────────────────┐ │
-                                    │  │    Cost Calculator & Logger    │ │
-                                    │  │  • Per-token cost tracking      │ │
-                                    │  │  • Savings vs baseline          │ │
-                                    │  │  • PostgreSQL persistence       │ │
-                                    │  └─────────────────────────────────┘ │
-                                    └──────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph Client
+        A[Client App]
+    end
+    
+    subgraph Gateway["API Gateway"]
+        B[FastAPI]
+        C[API Key Auth]
+    end
+    
+    subgraph Cache["Caching Layer"]
+        D["Semantic Cache<br/>(Redis Stack)"]
+        D1["Embedding Similarity"]
+        D2["72ms Cache Hits"]
+    end
+    
+    subgraph Router["Classification"]
+        E["LLM Router<br/>(Granite)"]
+        E1["SIMPLE"]
+        E2["MEDIUM"]
+        E3["COMPLEX"]
+    end
+    
+    subgraph Providers["LLM Providers"]
+        F["Granite Local<br/>$0.01/M tokens"]
+        G["Gemini Flash<br/>$0.075/M tokens"]
+        H["Gemini Pro<br/>$10/M tokens"]
+    end
+    
+    subgraph Logging["Observability"]
+        I["Cost Calculator"]
+        J["PostgreSQL Logger"]
+    end
+    
+    A --> B
+    B --> C
+    C --> D
+    D -->|Cache Hit| A
+    D -->|Cache Miss| E
+    E --> E1 & E2 & E3
+    E1 --> F
+    E2 --> G
+    E3 --> H
+    F & G & H --> I
+    I --> J
+    J --> A
 ```
 
 ---
@@ -383,16 +400,10 @@ pyrefly check
 
 ---
 
-## � Roadmap
+## 🛣️ Roadmap
 
 - [ ] **Streaming Responses**: SSE for real-time output
 - [ ] **Dashboard UI**: Cost analytics visualization
 - [ ] **OpenAI Compatibility**: Drop-in replacement for `/v1/chat/completions`
 - [ ] **Multi-Tenant**: Organization-level API key scoping
 - [ ] **Fine-Tuned Router**: Train classifier on production data
-
----
-
-## 📝 License
-
-MIT License - see [LICENSE](LICENSE) for details.
