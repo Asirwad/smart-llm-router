@@ -54,30 +54,49 @@ async def create_completion(
     
     Flow:
     1. Validate API key (via dependency)
-    2. Check cache for existing response (TODO: Phase 7)
+    2. Check cache for existing response
     3. Classify prompt difficulty
     4. Route to appropriate model
-    5. Log request and cost
-    6. Return response with cost data
+    5. Cache the response
+    6. Log request and cost
+    7. Return response with cost data
     """
     import time
     from src.core import get_router
     from src.providers import get_provider_manager, ProviderError
-    from src.services import get_cost_calculator, get_request_logger
+    from src.services import (
+        get_cost_calculator, 
+        get_request_logger, 
+        get_cache_service,
+        CachedResponse,
+    )
     
     start_time = time.perf_counter()
+    cache_service = get_cache_service()
     
-    # TODO: Phase 7 - Check cache first
-    cache_hit = False
+    # Step 1: Check cache first
+    cached = await cache_service.get(request.prompt)
+    if cached:
+        # Cache hit! Return early
+        latency_ms = int((time.perf_counter() - start_time) * 1000)
+        return CompletionResponse(
+            response=cached.text,
+            model_used=cached.model,
+            difficulty_tag=cached.difficulty_tag,
+            estimated_cost=cached.estimated_cost,
+            estimated_savings=cached.estimated_savings,
+            latency_ms=latency_ms,
+            cache_hit=True,
+        )
     
-    # Step 1: Classify the prompt
+    # Step 2: Classify the prompt
     router_agent = get_router()
     routing_decision = await router_agent.classify(
         request.prompt,
         force_tier=request.force_tier,
     )
     
-    # Step 2: Call the appropriate model
+    # Step 3: Call the appropriate model
     provider_manager = get_provider_manager()
     
     try:
@@ -94,7 +113,7 @@ async def create_completion(
             detail=f"LLM provider error: {e}",
         )
     
-    # Step 3: Calculate costs
+    # Step 4: Calculate costs
     calculator = get_cost_calculator()
     cost_estimate = calculator.estimate(
         model=response.model,
@@ -102,7 +121,21 @@ async def create_completion(
         output_tokens=response.completion_tokens,
     )
     
-    # Step 4: Log request to database
+    # Step 5: Cache the response
+    await cache_service.set(
+        request.prompt,
+        CachedResponse(
+            text=response.text,
+            model=response.model,
+            difficulty_tag=actual_tier.value,
+            prompt_tokens=response.prompt_tokens,
+            completion_tokens=response.completion_tokens,
+            estimated_cost=round(cost_estimate.estimated_cost, 6),
+            estimated_savings=round(cost_estimate.savings, 6),
+        ),
+    )
+    
+    # Step 6: Log request to database
     logger = get_request_logger()
     await logger.log_request(
         session=session,
@@ -111,7 +144,7 @@ async def create_completion(
         response_text=response.text,
         provider_response=response,
         tier=actual_tier,
-        cache_hit=cache_hit,
+        cache_hit=False,
     )
     
     # Calculate latency (includes all processing)
@@ -124,7 +157,7 @@ async def create_completion(
         estimated_cost=round(cost_estimate.estimated_cost, 6),
         estimated_savings=round(cost_estimate.savings, 6),
         latency_ms=latency_ms,
-        cache_hit=cache_hit,
+        cache_hit=False,
     )
 
 
