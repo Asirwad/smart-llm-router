@@ -49,7 +49,7 @@ flowchart LR
         C["Design microservices arch"] --> R
     end
     
-    R[Smart Model Router] --> D["Granite Local<br/>💰 $0.00001"]
+    R[Smart Model Router] --> D["IBM Granite Local<br/>💰 $0.00001"]
     R --> E["Gemini Flash<br/>💰 $0.0003"]
     R --> F["Gemini Pro<br/>💰 $0.01"]
     
@@ -80,14 +80,14 @@ flowchart TB
     end
     
     subgraph Router["Classification"]
-        E["LLM Router<br/>(Granite)"]
+        E["LLM Router<br/>(IBM Granite)"]
         E1["SIMPLE"]
         E2["MEDIUM"]
         E3["COMPLEX"]
     end
     
     subgraph Providers["LLM Providers"]
-        F["Granite Local<br/>$0.01/M tokens"]
+        F["IBM Granite Local<br/>$0.01/M tokens"]
         G["Gemini Flash<br/>$0.075/M tokens"]
         H["Gemini Pro<br/>$10/M tokens"]
     end
@@ -116,7 +116,7 @@ flowchart TB
 ## ✨ Key Features
 
 ### 🧠 Intelligent Routing
-- **LLM-Based Classification**: Uses a lightweight local model (Granite 4.0 Nano) to analyze prompt complexity
+- **LLM-Based Classification**: Uses a lightweight local model (IBM Granite 4.0 Nano) to analyze prompt complexity
 - **Rule-Based Fallback**: Heuristic scoring as a backup when LLM classification fails
 - **Force Override**: API parameter to bypass routing for testing or specific use cases
 
@@ -285,7 +285,7 @@ Health check with database connectivity status.
 
 The router uses a two-stage classification approach:
 
-1. **LLM-Based (Primary)**: Granite 4.0 Nano analyzes the prompt with a classification instruction:
+1. **LLM-Based (Primary)**: IBM Granite 4.0 Nano analyzes the prompt with a classification instruction:
    ```
    Classify this prompt: SIMPLE | MEDIUM | COMPLEX
    - SIMPLE: summarization, translation, simple Q&A
