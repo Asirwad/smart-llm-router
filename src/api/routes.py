@@ -57,12 +57,13 @@ async def create_completion(
     2. Check cache for existing response (TODO: Phase 7)
     3. Classify prompt difficulty
     4. Route to appropriate model
-    5. Log request and cost (TODO: Phase 6)
+    5. Log request and cost
     6. Return response with cost data
     """
     import time
     from src.core import get_router
     from src.providers import get_provider_manager, ProviderError
+    from src.services import get_cost_calculator, get_request_logger
     
     start_time = time.perf_counter()
     
@@ -93,20 +94,35 @@ async def create_completion(
             detail=f"LLM provider error: {e}",
         )
     
-    # Calculate latency
-    latency_ms = int((time.perf_counter() - start_time) * 1000)
+    # Step 3: Calculate costs
+    calculator = get_cost_calculator()
+    cost_estimate = calculator.estimate(
+        model=response.model,
+        input_tokens=response.prompt_tokens,
+        output_tokens=response.completion_tokens,
+    )
     
-    # TODO: Phase 6 - Calculate actual costs and log to database
-    # For now, use placeholder costs
-    estimated_cost = 0.0
-    estimated_savings = 0.0
+    # Step 4: Log request to database
+    logger = get_request_logger()
+    await logger.log_request(
+        session=session,
+        api_key_id=api_key.id,
+        prompt=request.prompt,
+        response_text=response.text,
+        provider_response=response,
+        tier=actual_tier,
+        cache_hit=cache_hit,
+    )
+    
+    # Calculate latency (includes all processing)
+    latency_ms = int((time.perf_counter() - start_time) * 1000)
     
     return CompletionResponse(
         response=response.text,
         model_used=response.model,
         difficulty_tag=actual_tier.value,
-        estimated_cost=estimated_cost,
-        estimated_savings=estimated_savings,
+        estimated_cost=round(cost_estimate.estimated_cost, 6),
+        estimated_savings=round(cost_estimate.savings, 6),
         latency_ms=latency_ms,
         cache_hit=cache_hit,
     )
