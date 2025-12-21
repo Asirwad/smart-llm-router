@@ -54,7 +54,7 @@ async def create_completion(
     
     Flow:
     1. Validate API key (via dependency)
-    2. Check cache for existing response
+    2. Check cache for existing response (semantic or exact match)
     3. Classify prompt difficulty
     4. Route to appropriate model
     5. Cache the response
@@ -62,32 +62,50 @@ async def create_completion(
     7. Return response with cost data
     """
     import time
+    from src.config import get_settings
     from src.core import get_router
     from src.providers import get_provider_manager, ProviderError
     from src.services import (
         get_cost_calculator, 
         get_request_logger, 
         get_cache_service,
+        get_semantic_cache_service,
         CachedResponse,
+        SemanticCachedResponse,
     )
     
     start_time = time.perf_counter()
-    cache_service = get_cache_service()
+    settings = get_settings()
     
-    # Step 1: Check cache first
-    cached = await cache_service.get(request.prompt)
-    if cached:
-        # Cache hit! Return early
-        latency_ms = int((time.perf_counter() - start_time) * 1000)
-        return CompletionResponse(
-            response=cached.text,
-            model_used=cached.model,
-            difficulty_tag=cached.difficulty_tag,
-            estimated_cost=cached.estimated_cost,
-            estimated_savings=cached.estimated_savings,
-            latency_ms=latency_ms,
-            cache_hit=True,
-        )
+    # Step 1: Check cache first (semantic or exact based on config)
+    if settings.use_semantic_cache:
+        semantic_cache = get_semantic_cache_service()
+        cached = await semantic_cache.get(request.prompt)
+        if cached:
+            latency_ms = int((time.perf_counter() - start_time) * 1000)
+            return CompletionResponse(
+                response=cached.text,
+                model_used=cached.model,
+                difficulty_tag=cached.difficulty_tag,
+                estimated_cost=cached.estimated_cost,
+                estimated_savings=cached.estimated_savings,
+                latency_ms=latency_ms,
+                cache_hit=True,
+            )
+    else:
+        cache_service = get_cache_service()
+        cached = await cache_service.get(request.prompt)
+        if cached:
+            latency_ms = int((time.perf_counter() - start_time) * 1000)
+            return CompletionResponse(
+                response=cached.text,
+                model_used=cached.model,
+                difficulty_tag=cached.difficulty_tag,
+                estimated_cost=cached.estimated_cost,
+                estimated_savings=cached.estimated_savings,
+                latency_ms=latency_ms,
+                cache_hit=True,
+            )
     
     # Step 2: Classify the prompt
     router_agent = get_router()
@@ -122,18 +140,33 @@ async def create_completion(
     )
     
     # Step 5: Cache the response
-    await cache_service.set(
-        request.prompt,
-        CachedResponse(
-            text=response.text,
-            model=response.model,
-            difficulty_tag=actual_tier.value,
-            prompt_tokens=response.prompt_tokens,
-            completion_tokens=response.completion_tokens,
-            estimated_cost=round(cost_estimate.estimated_cost, 6),
-            estimated_savings=round(cost_estimate.savings, 6),
-        ),
-    )
+    if settings.use_semantic_cache:
+        await semantic_cache.set(
+            request.prompt,
+            SemanticCachedResponse(
+                text=response.text,
+                model=response.model,
+                difficulty_tag=actual_tier.value,
+                prompt_tokens=response.prompt_tokens,
+                completion_tokens=response.completion_tokens,
+                estimated_cost=round(cost_estimate.estimated_cost, 6),
+                estimated_savings=round(cost_estimate.savings, 6),
+                original_prompt=request.prompt,
+            ),
+        )
+    else:
+        await cache_service.set(
+            request.prompt,
+            CachedResponse(
+                text=response.text,
+                model=response.model,
+                difficulty_tag=actual_tier.value,
+                prompt_tokens=response.prompt_tokens,
+                completion_tokens=response.completion_tokens,
+                estimated_cost=round(cost_estimate.estimated_cost, 6),
+                estimated_savings=round(cost_estimate.savings, 6),
+            ),
+        )
     
     # Step 6: Log request to database
     logger = get_request_logger()
