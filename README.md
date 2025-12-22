@@ -170,7 +170,7 @@ cp .env.example .env
 # Add your GOOGLE_API_KEY to .env
 
 # Start infrastructure (PostgreSQL, Redis Stack, Ollama)
-docker-compose up -d
+docker-compose up -d postgres redis ollama
 
 # Pull required models
 docker exec router-ollama ollama pull granite4:350m
