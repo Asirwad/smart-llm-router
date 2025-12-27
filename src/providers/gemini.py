@@ -139,6 +139,97 @@ class GeminiProvider(BaseProvider):
         except Exception:
             return False
     
+    async def generate_structured(
+        self,
+        prompt: str,
+        json_schema: dict,
+        model: str,
+        system_prompt: Optional[str] = None,
+    ) -> tuple[dict | list, int, int, int]:
+        """
+        Generate structured JSON output conforming to schema.
+        
+        Uses Gemini's responseSchema feature for guaranteed JSON.
+        
+        Args:
+            prompt: User prompt
+            json_schema: JSON Schema the response must conform to
+            model: Model to use
+            system_prompt: Optional system instruction
+            
+        Returns:
+            Tuple of (parsed_data, prompt_tokens, completion_tokens, latency_ms)
+        """
+        start_time = time.perf_counter()
+        
+        try:
+            # Build config with JSON schema
+            config = types.GenerateContentConfig(
+                temperature=0.3,  # Lower temp for structured output
+                max_output_tokens=4096,
+                response_mime_type="application/json",
+                response_schema=json_schema,
+            )
+            
+            # Add system instruction if provided
+            if system_prompt:
+                config.system_instruction = system_prompt
+            
+            response = await self._client.aio.models.generate_content(
+                model=model,
+                contents=prompt,
+                config=config,
+            )
+            
+            latency_ms = int((time.perf_counter() - start_time) * 1000)
+            
+            # Get token counts
+            prompt_tokens = self._estimate_tokens(prompt)
+            completion_tokens = 0
+            
+            if response.usage_metadata:
+                prompt_tokens = response.usage_metadata.prompt_token_count or prompt_tokens
+                completion_tokens = response.usage_metadata.candidates_token_count or 0
+            
+            # Parse the structured response
+            # response.parsed contains the already-parsed JSON
+            if hasattr(response, 'parsed') and response.parsed is not None:
+                return response.parsed, prompt_tokens, completion_tokens, latency_ms
+            
+            # Fallback to parsing response text
+            import json
+            text = ""
+            if response.candidates:
+                for candidate in response.candidates:
+                    if candidate.content and candidate.content.parts:
+                        for part in candidate.content.parts:
+                            if hasattr(part, 'text'):
+                                text += part.text or ""
+            
+            completion_tokens = completion_tokens or self._estimate_tokens(text)
+            parsed = json.loads(text)
+            return parsed, prompt_tokens, completion_tokens, latency_ms
+            
+        except Exception as e:
+            error_str = str(e).lower()
+            
+            if "rate" in error_str or "quota" in error_str or "429" in error_str:
+                raise ProviderRateLimitError(
+                    f"Gemini rate limit exceeded: {e}",
+                    self.name,
+                )
+            
+            if "timeout" in error_str or "deadline" in error_str:
+                raise ProviderTimeoutError(
+                    f"Gemini request timed out: {e}",
+                    self.name,
+                )
+            
+            raise ProviderError(
+                f"Gemini structured output error: {e}",
+                self.name,
+            )
+    
     async def close(self):
         """Close provider resources."""
         # google-genai client doesn't need explicit cleanup

@@ -21,6 +21,8 @@ from src.api.schemas import (
     CompletionResponse,
     ErrorResponse,
     HealthResponse,
+    StructuredRequest,
+    StructuredResponse,
 )
 from src.config import get_settings
 from src.db import APIKey, get_session
@@ -192,6 +194,78 @@ async def create_completion(
         latency_ms=latency_ms,
         cache_hit=False,
     )
+
+
+# ===================
+# Structured Output Endpoint
+# ===================
+
+@router.post(
+    "/structure",
+    response_model=StructuredResponse,
+    responses={
+        401: {"model": ErrorResponse, "description": "Invalid or missing API key"},
+        422: {"model": ErrorResponse, "description": "Validation error"},
+        500: {"model": ErrorResponse, "description": "Internal server error"},
+    },
+    summary="Generate structured JSON output",
+    description="Returns guaranteed structured JSON conforming to the provided schema using Gemini Flash.",
+)
+async def create_structured_output(
+    request: StructuredRequest,
+    api_key: ValidatedAPIKey,
+) -> StructuredResponse:
+    """
+    Generate structured JSON output.
+    
+    Uses Gemini's responseSchema feature for guaranteed JSON conforming to schema.
+    Always uses Gemini Flash for optimal speed/cost balance.
+    No caching - structured outputs are request-specific.
+    """
+    import time
+    from src.providers.gemini import GeminiProvider
+    from src.services import get_cost_calculator
+    
+    start_time = time.perf_counter()
+    settings = get_settings()
+    
+    # Always use Gemini Flash for structured output
+    model = settings.gemini_flash_model
+    
+    # Initialize Gemini provider
+    provider = GeminiProvider()
+    
+    try:
+        # Call Gemini with structured output
+        data, prompt_tokens, completion_tokens, _ = await provider.generate_structured(
+            prompt=request.prompt,
+            json_schema=request.json_schema,
+            model=model,
+            system_prompt=request.system_prompt,
+        )
+        
+        # Calculate cost
+        calculator = get_cost_calculator()
+        cost_estimate = calculator.estimate(
+            model=model,
+            input_tokens=prompt_tokens,
+            output_tokens=completion_tokens,
+        )
+        
+        latency_ms = int((time.perf_counter() - start_time) * 1000)
+        
+        return StructuredResponse(
+            data=data,
+            model_used=model,
+            estimated_cost=round(cost_estimate.estimated_cost, 6),
+            latency_ms=latency_ms,
+        )
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Structured output error: {str(e)}",
+        )
 
 
 # ===================

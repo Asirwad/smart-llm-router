@@ -43,6 +43,38 @@ class CompletionRequest(BaseModel):
     )
 
 
+class StructuredRequest(BaseModel):
+    """
+    Request body for the /v1/structure endpoint.
+    
+    Returns guaranteed structured JSON output conforming to provided schema.
+    """
+    prompt: str = Field(
+        ...,
+        min_length=1,
+        max_length=100000,
+        description="The text prompt to process",
+        examples=["Create a 3-step plan to add a factorial function"],
+    )
+    system_prompt: Optional[str] = Field(
+        default=None,
+        max_length=10000,
+        description="Optional system instruction for the model",
+    )
+    json_schema: dict = Field(
+        ...,
+        description="JSON Schema that the response must conform to",
+        examples=[{
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "age": {"type": "integer"}
+            },
+            "required": ["name", "age"]
+        }],
+    )
+
+
 class APIKeyCreate(BaseModel):
     """Request body for creating a new API key."""
     name: str = Field(
@@ -95,6 +127,33 @@ class CompletionResponse(BaseModel):
     cache_hit: bool = Field(
         default=False,
         description="Whether the response was served from cache",
+    )
+
+
+class StructuredResponse(BaseModel):
+    """
+    Response from the /v1/structure endpoint.
+    
+    Returns guaranteed structured JSON conforming to the provided schema.
+    """
+    data: dict | list = Field(
+        ...,
+        description="The structured JSON response (parsed, not string)",
+    )
+    model_used: str = Field(
+        ...,
+        description="The model that processed this request",
+        examples=["gemini-2.0-flash-exp"],
+    )
+    estimated_cost: float = Field(
+        ...,
+        ge=0,
+        description="Estimated cost in USD for this request",
+    )
+    latency_ms: int = Field(
+        ...,
+        ge=0,
+        description="Total request processing time in milliseconds",
     )
 
 
